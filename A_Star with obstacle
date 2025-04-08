@@ -1,0 +1,109 @@
+function path = goToNextEtad(etad, current_position, obstacles, gridSize)
+    % etad - Nx2 matrix of waypoints
+    % current_position - 1x2 vector
+    % obstacles - Mx2 matrix of obstacle coordinates
+    % gridSize - [rows, cols] size of the map
+
+    % Find start index
+    i = find(ismember(etad, current_position, 'rows'), 1);
+    
+    if isempty(i)
+        error('Current position not found in etad list.');
+    end
+    
+    % Find next goal that is not an obstacle
+    goal = [];
+    for j = i+1:size(etad,1)
+        if ~ismember(etad(j,:), obstacles, 'rows')
+            goal = etad(j,:);
+            break;
+        end
+    end
+    
+    if isempty(goal)
+        error('No valid goal found in etad list.');
+    end
+    
+    % Call A* algorithm
+    path = a_star(current_position, goal, gridSize, obstacles);
+end
+
+function path = a_star(start, goal, gridSize, obstacles)
+    % Define 4-connected neighbors
+    neighbors = [0 1; 1 0; 0 -1; -1 0];
+    
+    rows = gridSize(1);
+    cols = gridSize(2);
+    
+    openSet = start;
+    cameFrom = containers.Map;
+    gScore = containers.Map(coord2key(start), 0);
+    fScore = containers.Map(coord2key(start), heuristic(start, goal));
+    
+    while ~isempty(openSet)
+        % Get node with lowest fScore
+        [~, idx] = min(cell2mat(values(fScore, cellfun(@coord2key, num2cell(openSet, 2), 'UniformOutput', false))));
+        current = openSet(idx,:);
+        
+        if isequal(current, goal)
+            % Reconstruct path
+            path = current;
+            key = coord2key(current);
+            while isKey(cameFrom, key)
+                current = cameFrom(key);
+                path = [current; path];
+                key = coord2key(current);
+            end
+            return
+        end
+        
+        openSet(idx,:) = [];
+        remove(fScore, coord2key(current));
+        
+        for n = 1:size(neighbors,1)
+            neighbor = current + neighbors(n,:);
+            
+            % Check bounds
+            if any(neighbor < 1) || neighbor(1) > rows || neighbor(2) > cols
+                continue
+            end
+            
+            % Check obstacle
+            if ismember(neighbor, obstacles, 'rows')
+                continue
+            end
+            
+            tentative_gScore = gScore(coord2key(current)) + 1;
+            neighborKey = coord2key(neighbor);
+            
+            if ~isKey(gScore, neighborKey) || tentative_gScore < gScore(neighborKey)
+                cameFrom(neighborKey) = current;
+                gScore(neighborKey) = tentative_gScore;
+                fScore(neighborKey) = tentative_gScore + heuristic(neighbor, goal);
+                
+                if ~ismember(neighbor, openSet, 'rows')
+                    openSet = [openSet; neighbor];
+                end
+            end
+        end
+    end
+    
+    path = []; % no path found
+end
+
+function h = heuristic(a, b)
+    % Manhattan distance
+    h = abs(a(1) - b(1)) + abs(a(2) - b(2));
+end
+
+function key = coord2key(coord)
+    key = sprintf('%d,%d', coord(1), coord(2));
+end
+etad = [1 1; 1 2; 1 3; 1 4; 2 4; 3 4];
+current_position = [1 1];
+obstacles = [1 2];
+gridSize = [10 10];
+
+path = goToNextEtad(etad, current_position, obstacles, gridSize);
+disp('Path:');
+disp(path);
